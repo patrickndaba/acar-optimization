@@ -241,4 +241,4 @@ else:
     f3.markdown("### 🌱 Sustainable\nOptimized for the lowest carbon footprint without sacrificing speed.")
 
 st.markdown("---")
-st.markdown("<p style='text-align: center; color: #94a3b8;'>ACAR Framework Deployment © 2024 | Perishable Food Supply Chain Optimization</p>", unsafe_allow_html=True)
+st.markdown("<p style='text-align: center; color: #94a3b8;'>ACAR Framework Deployment © 2026 | Perishable Food Supply Chain Optimization</p>", unsafe_allow_html=True)
