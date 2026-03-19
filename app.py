@@ -43,9 +43,10 @@ def calculate_metrics(path, G):
     for i in range(len(path) - 1):
         u, v = path[i], path[i+1]
         data = G[u][v]
-        t_cost += data['original_cost']
-        t_time += data['time']
-        t_co2 += data['carbon']
+        # Fallback to 0 if keys are missing from the exported graph
+        t_cost += data.get('original_cost', data.get('weight', 0))
+        t_time += data.get('time', 0)
+        t_co2 += data.get('carbon', 0)
     return t_cost, t_time, t_co2
 
 # --- MAIN PAGE: OPTIMIZATION ---
@@ -53,9 +54,10 @@ if st.button("ðŸš€ Optimize Route"):
     if G is not None:
         try:
             # 1. FIND THE ROUTES
-            # Standard Path: Only cared about the lowest original INR cost
-            path_standard = nx.shortest_path(G, source=source_city, target=dest_city, weight='original_cost')
-            # Smart Path: Cares about Cost + Quality + CO2 (pre-calculated Smart_Weight as 'weight' in graph)
+            # Standard Path: Fallback to 'weight' if 'original_cost' missing
+            cost_weight = 'original_cost' if 'original_cost' in G[list(G.nodes())[0]][list(G.neighbors(list(G.nodes())[0]))[0]] else 'weight'
+            path_standard = nx.shortest_path(G, source=source_city, target=dest_city, weight=cost_weight)
+            # Smart Path: 'weight' is our Smart_Weight
             path_smart = nx.shortest_path(G, source=source_city, target=dest_city, weight='weight')
             
             # 2. CALCULATE METRICS
