@@ -15,20 +15,18 @@ st.markdown("---")
 @st.cache_resource
 def load_assets():
     try:
-        # Load the graph
-        with open('logistics_graph.gpickle', 'rb') as f:
-            G = pickle.load(f)
-        
-        # Load the Random Forest model and preprocessor
-        rf = joblib.load('acar_rf_model.pkl')
-        preprocessor = joblib.load('preprocessor.pkl')
-        
-        return G, rf, preprocessor
+        # Load the Dual Graphs
+        with open('logistics_graph_std.gpickle', 'rb') as f:
+            G_std = pickle.load(f)
+        with open('logistics_graph_smart.gpickle', 'rb') as f:
+            G_smart = pickle.load(f)
+        return G_std, G_smart
     except Exception as e:
         st.error(f"Error loading assets: {e}")
-        return None, None, None
+        return None, None
 
-G, rf, preprocessor = load_assets()
+G_std, G_smart = load_assets()
+
 # --- SIDEBAR: INPUTS ---
 st.sidebar.header("Shipment Parameters")
 
@@ -40,62 +38,41 @@ food_product = st.sidebar.selectbox("Food Product", ['Fresh Vegetables', 'Frozen
 def get_automated_policy(product_name):
     high_perishables = ['Milk', 'Fresh Vegetables', 'Meat', 'Fresh Fruits', 'Fish']
     moderate_perishables = ['Frozen Peas', 'Ready-to-Eat Meals', 'Cheese', 'Paneer', 'Curd']
-    
-    if product_name in high_perishables:
-        return (0.20, 0.70, 0.10) # Priority: Quality (Time) > Cost
-    elif product_name in moderate_perishables:
-        return (0.40, 0.40, 0.20) # Balanced Approach
-    else:
-        return (0.70, 0.10, 0.20) # Priority: Cost (Standard)
+    if product_name in high_perishables: return (0.20, 0.70, 0.10)
+    elif product_name in moderate_perishables: return (0.40, 0.40, 0.20)
+    else: return (0.70, 0.10, 0.20)
 
 alpha, beta, gamma = get_automated_policy(food_product)
-
 st.sidebar.markdown("---")
-st.sidebar.success(f"**🤖 Smart AI Policy Active**\n\nOptimizing specifically for **{food_product}**:\n\n- 💰 **Cost Focus:** {alpha*100:.0f}%\n- ⏱️ **Quality/Time Focus:** {beta*100:.0f}%\n- 🌱 **Eco/CO2 Focus:** {gamma*100:.0f}%")
+st.sidebar.success(f"**🤖 Smart AI Policy Active**\n\nOptimizing for **{food_product}**:\n- 💰 Cost: {alpha*100:.0f}%\n- ⏱️ Quality: {beta*100:.0f}%\n- 🌱 Eco: {gamma*100:.0f}%")
 
 # --- HELPER FUNCTIONS ---
-def calculate_metrics(path, G):
+def get_path_metrics(path, G):
     t_cost, t_time, t_co2 = 0, 0, 0
     for i in range(len(path) - 1):
         u, v = path[i], path[i+1]
         data = G[u][v]
-        # Fallback to 0 if keys are missing
-        t_cost += data.get('original_cost', data.get('weight', 0))
+        t_cost += data.get('cost', 0)
         t_time += data.get('time', 0)
         t_co2 += data.get('carbon', 0)
     return t_cost, t_time, t_co2
 
-def calculate_custom_smart_weight(G, u, v, a, b, g):
-    data = G[u][v]
-    cost = data.get('original_cost', 0)
-    time = data.get('time', 0)
-    co2 = data.get('carbon', 0)
-    # Scale factors to balance the equation (Cost is ~10,000s, Time is ~10s, CO2 is ~100s)
-    return (a * cost) + (b * time * 1000) + (g * co2 * 10)
-
 # --- MAIN PAGE: OPTIMIZATION ---
 if st.button("Optimize Route"):
-    if G is not None:
+    if G_std is not None and G_smart is not None:
         try:
             # 1. FIND THE ROUTES
-            # Standard Path: Minimum INR Cost
-            path_standard = nx.shortest_path(G, source=source_city, target=dest_city, weight='original_cost')
-
-            # Dynamic Smart Path: Using AI Product Policy
-            G_temp = G.copy()
-            for u, v in G_temp.edges():
-                G_temp[u][v]['custom_weight'] = calculate_custom_smart_weight(G_temp, u, v, alpha, beta, gamma)
-
-            path_smart = nx.shortest_path(G_temp, source=source_city, target=dest_city, weight='custom_weight')
-
+            # Standard: Shortest path based on MIN COST shipment
+            path_standard = nx.shortest_path(G_std, source=source_city, target=dest_city, weight='weight')
+            # Smart AI: Shortest path based on MULTI-OBJECTIVE shipment
+            path_smart = nx.shortest_path(G_smart, source=source_city, target=dest_city, weight='weight')
 
             # 2. CALCULATE METRICS
-            cost_std, time_std, co2_std = calculate_metrics(path_standard, G)
-            cost_smart, time_smart, co2_smart = calculate_metrics(path_smart, G)
+            cost_std, time_std, co2_std = get_path_metrics(path_standard, G_std)
+            cost_smart, time_smart, co2_smart = get_path_metrics(path_smart, G_smart)
             
             # 3. DISPLAY RESULTS
             col1, col2 = st.columns(2)
-            
             with col1:
                 st.subheader("Optimized Route")
                 st.success(" -> ".join(path_smart))
@@ -103,56 +80,32 @@ if st.button("Optimize Route"):
             with col2:
                 st.subheader("Visualization")
                 fig, ax = plt.subplots(figsize=(8, 6))
-                pos = nx.spring_layout(G, seed=42)
-                nx.draw(G, pos, with_labels=True, node_color='lightgrey', node_size=600, ax=ax)
-                
-                # Highlight Smart path
-                smart_edges = list(zip(path_smart, path_smart[1:]))
-                nx.draw_networkx_nodes(G, pos, nodelist=path_smart, node_color='green', ax=ax)
-                nx.draw_networkx_edges(G, pos, edgelist=smart_edges, edge_color='green', width=4, alpha=0.6, ax=ax)
-                
-                # Highlight Standard path if different
+                pos = nx.spring_layout(G_smart, seed=42)
+                nx.draw(G_smart, pos, with_labels=True, node_color='lightgrey', node_size=600, ax=ax)
+                nx.draw_networkx_nodes(G_smart, pos, nodelist=path_smart, node_color='green', ax=ax)
+                nx.draw_networkx_edges(G_smart, pos, edgelist=list(zip(path_smart, path_smart[1:])), edge_color='green', width=4, alpha=0.6, ax=ax)
                 if path_standard != path_smart:
-                    std_edges = list(zip(path_standard, path_standard[1:]))
-                    nx.draw_networkx_edges(G, pos, edgelist=std_edges, edge_color='red', width=2, style='dashed', alpha=0.8, ax=ax)
-                    st.caption("Green: Smart Route | Red Dashed: Standard Route")
-                
+                    nx.draw_networkx_edges(G_std, pos, edgelist=list(zip(path_standard, path_standard[1:])), edge_color='red', width=2, style='dashed', ax=ax)
                 st.pyplot(fig)
 
             # 4. COMPARISON TABLE
             st.subheader("Physical Route Comparison: Standard vs. Smart AI")
             comparison_data = {
                 "Metric": ["Path Taken", "Transportation Cost (INR)", "Total Transit Time (Hrs)", "CO2 Emissions (kg)"],
-                "STANDARD (Cost-Min)": [
-                    " -> ".join(path_standard), 
-                    f"{cost_std:,.2f}", 
-                    f"{time_std:.2f} hrs", 
-                    f"{co2_std:.2f} kg"
-                ],
-                "SMART AI (Multi-Objective)": [
-                    " -> ".join(path_smart), 
-                    f"{cost_smart:,.2f}", 
-                    f"{time_smart:.2f} hrs", 
-                    f"{co2_smart:.2f} kg"
-                ]
+                "STANDARD (Cost-Min)": [" -> ".join(path_standard), f"{cost_std:,.2f}", f"{time_std:.2f} hrs", f"{co2_std:.2f} kg"],
+                "SMART AI (Multi-Objective)": [" -> ".join(path_smart), f"{cost_smart:,.2f}", f"{time_smart:.2f} hrs", f"{co2_smart:.2f} kg"]
             }
-            df_compare = pd.DataFrame(comparison_data)
-            st.table(df_compare)
+            st.table(pd.DataFrame(comparison_data))
             
-            # Summary Metrics with zero-division safety
+            # Summary Metrics
             diff_cost = cost_smart - cost_std
             diff_co2 = co2_smart - co2_std
-            
             col_a, col_b = st.columns(2)
-            
             cost_delta = f"{(diff_cost/cost_std)*100:.1f}%" if cost_std != 0 else "N/A"
             co2_delta = f"{(diff_co2/co2_std)*100:.1f}%" if co2_std != 0 else "N/A"
-            
             col_a.metric("Cost Difference", f"{diff_cost:,.2f}", delta=cost_delta, delta_color="inverse")
             col_b.metric("CO2 Change", f"{diff_co2:,.2f} kg", delta=co2_delta, delta_color="inverse")
 
-        except nx.NetworkXNoPath:
-            st.error("No path found between the selected cities!")
         except Exception as e:
             st.error(f"An error occurred: {e}")
     else:
