@@ -29,13 +29,25 @@ def load_assets():
         return None, None, None
 
 G, rf, preprocessor = load_assets()
-
 # --- SIDEBAR: INPUTS ---
 st.sidebar.header("Shipment Parameters")
 
 source_city = st.sidebar.selectbox("Source City", ['Pune', 'Patna', 'Chandigarh', 'Ahmedabad', 'Kolkata', 'Chennai', 'Mumbai', 'Indore', 'Hyderabad', 'Delhi'])
 dest_city = st.sidebar.selectbox("Destination City", ['Indore', 'Bhubaneswar', 'Raipur', 'Chennai', 'Delhi', 'Kolkata', 'Ranchi', 'Bhopal', 'Ahmedabad', 'Bengaluru'])
 food_product = st.sidebar.selectbox("Food Product", ['Fresh Vegetables', 'Frozen Peas', 'Milk', 'Ready-to-Eat Meals', 'Cheese', 'Paneer', 'Fresh Fruits', 'Fish', 'Meat', 'Curd'])
+
+st.sidebar.markdown("---")
+st.sidebar.header("Optimization Policy")
+alpha = st.sidebar.slider("Cost Weight (Alpha)", 0.0, 1.0, 0.4)
+beta = st.sidebar.slider("Quality Weight (Beta)", 0.0, 1.0, 0.4)
+gamma = st.sidebar.slider("Eco Weight (Gamma)", 0.0, 1.0, 0.2)
+
+# Normalize weights
+total_w = alpha + beta + gamma
+if total_w > 0:
+    alpha /= total_w
+    beta /= total_w
+    gamma /= total_w
 
 # --- HELPER FUNCTIONS ---
 def calculate_metrics(path, G):
@@ -49,15 +61,30 @@ def calculate_metrics(path, G):
         t_co2 += data.get('carbon', 0)
     return t_cost, t_time, t_co2
 
+def calculate_custom_smart_weight(G, u, v, a, b, g):
+    data = G[u][v]
+    cost = data.get('original_cost', 0)
+    time = data.get('time', 0)
+    co2 = data.get('carbon', 0)
+    # Simple composite score for live demo
+    return (a * cost) + (b * time * 100) + (g * co2 * 10)
+
 # --- MAIN PAGE: OPTIMIZATION ---
 if st.button("Optimize Route"):
     if G is not None:
         try:
             # 1. FIND THE ROUTES
-            cost_weight = 'original_cost' if 'original_cost' in G[list(G.nodes())[0]][list(G.neighbors(list(G.nodes())[0]))[0]] else 'weight'
-            path_standard = nx.shortest_path(G, source=source_city, target=dest_city, weight=cost_weight)
-            path_smart = nx.shortest_path(G, source=source_city, target=dest_city, weight='weight')
-            
+            # Standard Path: Minimum INR Cost
+            path_standard = nx.shortest_path(G, source=source_city, target=dest_city, weight='original_cost')
+
+            # Dynamic Smart Path: Using sidebar sliders
+            # Create a temporary graph with the user's custom weights
+            G_temp = G.copy()
+            for u, v in G_temp.edges():
+                G_temp[u][v]['custom_weight'] = calculate_custom_smart_weight(G_temp, u, v, alpha, beta, gamma)
+
+            path_smart = nx.shortest_path(G_temp, source=source_city, target=dest_city, weight='custom_weight')
+
             # 2. CALCULATE METRICS
             cost_std, time_std, co2_std = calculate_metrics(path_standard, G)
             cost_smart, time_smart, co2_smart = calculate_metrics(path_smart, G)
