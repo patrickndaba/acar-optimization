@@ -36,18 +36,22 @@ source_city = st.sidebar.selectbox("Source City", ['Pune', 'Patna', 'Chandigarh'
 dest_city = st.sidebar.selectbox("Destination City", ['Indore', 'Bhubaneswar', 'Raipur', 'Chennai', 'Delhi', 'Kolkata', 'Ranchi', 'Bhopal', 'Ahmedabad', 'Bengaluru'])
 food_product = st.sidebar.selectbox("Food Product", ['Fresh Vegetables', 'Frozen Peas', 'Milk', 'Ready-to-Eat Meals', 'Cheese', 'Paneer', 'Fresh Fruits', 'Fish', 'Meat', 'Curd'])
 
-st.sidebar.markdown("---")
-st.sidebar.header("Optimization Policy")
-alpha = st.sidebar.slider("Cost Weight (Alpha)", 0.0, 1.0, 0.4)
-beta = st.sidebar.slider("Quality Weight (Beta)", 0.0, 1.0, 0.4)
-gamma = st.sidebar.slider("Eco Weight (Gamma)", 0.0, 1.0, 0.2)
+# --- SMART AI POLICY MAPPING ---
+def get_automated_policy(product_name):
+    high_perishables = ['Milk', 'Fresh Vegetables', 'Meat', 'Fresh Fruits', 'Fish']
+    moderate_perishables = ['Frozen Peas', 'Ready-to-Eat Meals', 'Cheese', 'Paneer', 'Curd']
+    
+    if product_name in high_perishables:
+        return (0.20, 0.70, 0.10) # Priority: Quality (Time) > Cost
+    elif product_name in moderate_perishables:
+        return (0.40, 0.40, 0.20) # Balanced Approach
+    else:
+        return (0.70, 0.10, 0.20) # Priority: Cost (Standard)
 
-# Normalize weights
-total_w = alpha + beta + gamma
-if total_w > 0:
-    alpha /= total_w
-    beta /= total_w
-    gamma /= total_w
+alpha, beta, gamma = get_automated_policy(food_product)
+
+st.sidebar.markdown("---")
+st.sidebar.success(f"**🤖 Smart AI Policy Active**\n\nOptimizing specifically for **{food_product}**:\n\n- 💰 **Cost Focus:** {alpha*100:.0f}%\n- ⏱️ **Quality/Time Focus:** {beta*100:.0f}%\n- 🌱 **Eco/CO2 Focus:** {gamma*100:.0f}%")
 
 # --- HELPER FUNCTIONS ---
 def calculate_metrics(path, G):
@@ -66,8 +70,8 @@ def calculate_custom_smart_weight(G, u, v, a, b, g):
     cost = data.get('original_cost', 0)
     time = data.get('time', 0)
     co2 = data.get('carbon', 0)
-    # Simple composite score for live demo
-    return (a * cost) + (b * time * 100) + (g * co2 * 10)
+    # Scale factors to balance the equation (Cost is ~10,000s, Time is ~10s, CO2 is ~100s)
+    return (a * cost) + (b * time * 1000) + (g * co2 * 10)
 
 # --- MAIN PAGE: OPTIMIZATION ---
 if st.button("Optimize Route"):
@@ -77,13 +81,13 @@ if st.button("Optimize Route"):
             # Standard Path: Minimum INR Cost
             path_standard = nx.shortest_path(G, source=source_city, target=dest_city, weight='original_cost')
 
-            # Dynamic Smart Path: Using sidebar sliders
-            # Create a temporary graph with the user's custom weights
+            # Dynamic Smart Path: Using AI Product Policy
             G_temp = G.copy()
             for u, v in G_temp.edges():
                 G_temp[u][v]['custom_weight'] = calculate_custom_smart_weight(G_temp, u, v, alpha, beta, gamma)
 
             path_smart = nx.shortest_path(G_temp, source=source_city, target=dest_city, weight='custom_weight')
+
 
             # 2. CALCULATE METRICS
             cost_std, time_std, co2_std = calculate_metrics(path_standard, G)
