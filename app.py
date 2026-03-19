@@ -8,18 +8,18 @@ import matplotlib.pyplot as plt
 # --- PAGE CONFIG ---
 st.set_page_config(page_title="ACAR Framework Deployment", layout="wide")
 
-st.title("ðŸšš ACAR Framework: Perishable Food Supply Chain Optimization")
+st.title("ACAR Framework: Perishable Food Supply Chain Optimization")
 st.markdown("---")
 
 # --- LOAD DATA AND MODELS ---
 @st.cache_resource
 def load_assets():
     try:
-        # Load the graph (G_auto_smart which was exported as logistics_graph.gpickle)
+        # Load the graph
         with open('logistics_graph.gpickle', 'rb') as f:
             G = pickle.load(f)
         
-        # Load the Random Forest model and preprocessor (optional for now, as shortest path is in graph)
+        # Load the Random Forest model and preprocessor
         rf = joblib.load('acar_rf_model.pkl')
         preprocessor = joblib.load('preprocessor.pkl')
         
@@ -31,7 +31,7 @@ def load_assets():
 G, rf, preprocessor = load_assets()
 
 # --- SIDEBAR: INPUTS ---
-st.sidebar.header("ðŸ“¥ Shipment Parameters")
+st.sidebar.header("Shipment Parameters")
 
 source_city = st.sidebar.selectbox("Source City", ['Pune', 'Patna', 'Chandigarh', 'Ahmedabad', 'Kolkata', 'Chennai', 'Mumbai', 'Indore', 'Hyderabad', 'Delhi'])
 dest_city = st.sidebar.selectbox("Destination City", ['Indore', 'Bhubaneswar', 'Raipur', 'Chennai', 'Delhi', 'Kolkata', 'Ranchi', 'Bhopal', 'Ahmedabad', 'Bengaluru'])
@@ -43,21 +43,19 @@ def calculate_metrics(path, G):
     for i in range(len(path) - 1):
         u, v = path[i], path[i+1]
         data = G[u][v]
-        # Fallback to 0 if keys are missing from the exported graph
+        # Fallback to 0 if keys are missing
         t_cost += data.get('original_cost', data.get('weight', 0))
         t_time += data.get('time', 0)
         t_co2 += data.get('carbon', 0)
     return t_cost, t_time, t_co2
 
 # --- MAIN PAGE: OPTIMIZATION ---
-if st.button("ðŸš€ Optimize Route"):
+if st.button("Optimize Route"):
     if G is not None:
         try:
             # 1. FIND THE ROUTES
-            # Standard Path: Fallback to 'weight' if 'original_cost' missing
             cost_weight = 'original_cost' if 'original_cost' in G[list(G.nodes())[0]][list(G.neighbors(list(G.nodes())[0]))[0]] else 'weight'
             path_standard = nx.shortest_path(G, source=source_city, target=dest_city, weight=cost_weight)
-            # Smart Path: 'weight' is our Smart_Weight
             path_smart = nx.shortest_path(G, source=source_city, target=dest_city, weight='weight')
             
             # 2. CALCULATE METRICS
@@ -68,11 +66,11 @@ if st.button("ðŸš€ Optimize Route"):
             col1, col2 = st.columns(2)
             
             with col1:
-                st.subheader("ðŸ“ Optimized Route")
-                st.success(" âžœ ".join(path_smart))
+                st.subheader("Optimized Route")
+                st.success(" -> ".join(path_smart))
             
             with col2:
-                st.subheader("ðŸ“Š Visualization")
+                st.subheader("Visualization")
                 fig, ax = plt.subplots(figsize=(8, 6))
                 pos = nx.spring_layout(G, seed=42)
                 nx.draw(G, pos, with_labels=True, node_color='lightgrey', node_size=600, ax=ax)
@@ -91,18 +89,18 @@ if st.button("ðŸš€ Optimize Route"):
                 st.pyplot(fig)
 
             # 4. COMPARISON TABLE
-            st.subheader("ðŸ“Š Physical Route Comparison: Standard vs. Smart AI")
+            st.subheader("Physical Route Comparison: Standard vs. Smart AI")
             comparison_data = {
                 "Metric": ["Path Taken", "Transportation Cost (INR)", "Total Transit Time (Hrs)", "CO2 Emissions (kg)"],
                 "STANDARD (Cost-Min)": [
-                    " âžœ ".join(path_standard), 
-                    f"â‚¹{cost_std:,.2f}", 
+                    " -> ".join(path_standard), 
+                    f"{cost_std:,.2f}", 
                     f"{time_std:.2f} hrs", 
                     f"{co2_std:.2f} kg"
                 ],
                 "SMART AI (Multi-Objective)": [
-                    " âžœ ".join(path_smart), 
-                    f"â‚¹{cost_smart:,.2f}", 
+                    " -> ".join(path_smart), 
+                    f"{cost_smart:,.2f}", 
                     f"{time_smart:.2f} hrs", 
                     f"{co2_smart:.2f} kg"
                 ]
@@ -110,20 +108,24 @@ if st.button("ðŸš€ Optimize Route"):
             df_compare = pd.DataFrame(comparison_data)
             st.table(df_compare)
             
-            # Summary Metrics
+            # Summary Metrics with zero-division safety
             diff_cost = cost_smart - cost_std
             diff_co2 = co2_smart - co2_std
             
             col_a, col_b = st.columns(2)
-            col_a.metric("Cost Difference", f"â‚¹{diff_cost:,.2f}", delta=f"{diff_cost/cost_std*100:.1f}%", delta_color="inverse")
-            col_b.metric("CO2 Change", f"{diff_co2:,.2f} kg", delta=f"{diff_co2/co2_std*100:.1f}%", delta_color="inverse")
+            
+            cost_delta = f"{(diff_cost/cost_std)*100:.1f}%" if cost_std != 0 else "N/A"
+            co2_delta = f"{(diff_co2/co2_std)*100:.1f}%" if co2_std != 0 else "N/A"
+            
+            col_a.metric("Cost Difference", f"{diff_cost:,.2f}", delta=cost_delta, delta_color="inverse")
+            col_b.metric("CO2 Change", f"{diff_co2:,.2f} kg", delta=co2_delta, delta_color="inverse")
 
         except nx.NetworkXNoPath:
             st.error("No path found between the selected cities!")
         except Exception as e:
             st.error(f"An error occurred: {e}")
     else:
-        st.warning("Please ensure models are exported and the graph is available.")
+        st.warning("Please ensure assets are loaded.")
 
 st.sidebar.markdown("---")
 st.sidebar.info("This app uses the ACAR Framework for multi-objective supply chain optimization.")
