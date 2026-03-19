@@ -26,9 +26,13 @@ st.markdown("""
         border-right: 1px solid #e0e0e0;
     }
     
+    /* Global Font Change */
+    html, body, [class*="css"], .stMarkdown, .main-header, .sub-header, h1, h2, h3, h4 {
+        font-family: 'Times New Roman', Times, serif !important;
+    }
+    
     /* Professional Header */
     .main-header {
-        font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
         color: #1e3a8a;
         font-size: 2.5rem;
         font-weight: 800;
