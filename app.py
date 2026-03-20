@@ -152,9 +152,10 @@ def build_optimized_graphs(options, a, b, g):
         # Standard
         cheapest = min(shipments, key=lambda x: x['cost'])
         G_std.add_edge(u, v, weight=cheapest['cost'], cost=cheapest['cost'], time=cheapest['time'], carbon=cheapest['co2'], max_time=cheapest['max_time'])
-        # Smart
-        best_smart = min(shipments, key=lambda x: (a * x['cost']) + (b * (x['time']/x['max_time']) * 10000) + (g * x['co2'] * 10))
-        G_smart.add_edge(u, v, weight=(a * best_smart['cost']) + (b * (best_smart['time']/best_smart['max_time']) * 10000) + (g * best_smart['co2'] * 10), 
+        # 2. Smart AI: Find BEST shipment for this POLICY
+        # Increased scale factor significantly (30,000) so Quality outweighs Cost for Perishables
+        best_smart = min(shipments, key=lambda x: (a * x['cost']) + (b * (x['time']/x['max_time']) * 30000) + (g * x['co2'] * 10))
+        G_smart.add_edge(u, v, weight=(a * best_smart['cost']) + (b * (best_smart['time']/best_smart['max_time']) * 30000) + (g * best_smart['co2'] * 10), 
                          cost=best_smart['cost'], time=best_smart['time'], carbon=best_smart['co2'], max_time=best_smart['max_time'])
     return G_std, G_smart
 
